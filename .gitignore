@@ -8,6 +8,6 @@ tmp
 bench-tmp
 badger-bench.test
 logs/
-*.log
 run.*
+*.log
 *.log

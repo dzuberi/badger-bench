@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from plotnine import *
 
+dir = "."
+
 latencies = ["50",
              "90",
              "99",
@@ -104,7 +106,8 @@ def create_and_save_plot(data, req_type, percentile):
            labs(x="Achieved load (req/s)", y=f"{percentile} Latency (us)") + \
            coord_cartesian(ylim=(0, max_latency_long[percentile] if req_type == "long" else max_latency_short[percentile]))
     plot.show()
-    ggsave(plot, filename=f"latency_{percentile}_{req_type}.pdf", width=5.5, height=4, dpi=300)
+    global dir
+    ggsave(plot, filename=f"{dir}/latency_{percentile}_{req_type}.png", width=5.5, height=4, dpi=300)
 
 
 def plot_latency_percentile_bimodal(all_data, percentile):
@@ -124,6 +127,9 @@ def main():
     parser = argparse.ArgumentParser(description='Find all CSV files recursively from a given directory.')
     parser.add_argument('directory', type=str, help='The directory to search for CSV files.')
     args = parser.parse_args()
+
+    global dir
+    dir = args.directory
     
     global f
     f = find_csv_files(args.directory)

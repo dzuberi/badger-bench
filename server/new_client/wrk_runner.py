@@ -83,7 +83,7 @@ class BadgerServer(Server):
         if self.exp["preempt_type"] == PreemptType.UINTR:
             env += "UINTR=1 "
         global data_path
-        cmd = f"./server --keys_mil 250 --valsz 128 -port={self.exp['current_port']} -run={data_path}/{self.exp['name']} -dir=\"/data/db_data\""
+        cmd = f"./badger-server --keys_mil 250 --valsz 128 -port={self.exp['current_port']} -run={data_path}/{self.exp['name']} -dir=\"/data/db_data\""
         # cmd = f"numactl --cpunodebind {numa_node} "+cmd
         if self.exp['collect_traces']:
             cmd += " -trace"
@@ -96,7 +96,7 @@ class BadgerServer(Server):
         time.sleep(120)
 
         # fetch the PID for the server
-        pids = get_pids("server")
+        pids = get_pids("badger-server")
         self.exp['server_pid'] = pids[0]
 
     def get_uptime(self):
@@ -315,9 +315,9 @@ def benchmark_data_point(exp, target_rate):
             if exp['workload_file'] == "short.lua":
                 uri= "/getkey/1"
             else:
-                uri = "/iteratekey/800/1"
+                uri = "/iteratekey/250/1"
 
-            command = f"ssh hp019.utah.cloudlab.us \"/data/caladan/apps/synthetic/target/release/synthetic 10.10.1.2:{exp['current_port']} --threads 100 --protocol http --transport tcp --http_uri {uri} --runtime 20 --mode runtime-client --mpps {target_rate/1e6} --config /data/caladan/client-go.config\""
+            command = f"ssh hp047.utah.cloudlab.us \"/data/caladan/apps/synthetic/target/release/synthetic 10.10.1.2:{exp['current_port']} --threads 100 --protocol http --transport tcp --http_uri {uri} --runtime 20 --mode runtime-client --mpps {target_rate/1e6} --config /data/caladan/client-go.config\""
             # full_command = f"numactl --cpunodebind {numa_node} " + command
             full_command = command
 
@@ -337,7 +337,7 @@ def benchmark_data_point(exp, target_rate):
             short_rate = int(target_rate * 0.95)
             # command_short = f"wrk_ds -t50 -c50 -d50s -R{short_rate} -s {s.short_req} --dist exp --latency http://127.0.0.1:{exp['current_port']}"
             # full_command_short = f"numactl --cpunodebind {numa_node} " + command_short
-            full_command_short = f"ssh hp019.utah.cloudlab.us \"/data/caladan/apps/synthetic/target/release/synthetic 10.10.1.2:{exp['current_port']} --threads 800 --protocol http --transport tcp --http_uri /getkey/1 --runtime 20 --mode runtime-client --mpps {short_rate/1e6} --config /data/caladan/client1.config\""
+            full_command_short = f"ssh hp047.utah.cloudlab.us \"/data/caladan/apps/synthetic/target/release/synthetic 10.10.1.2:{exp['current_port']} --threads 100 --protocol http --transport tcp --http_uri /getkey/1 --runtime 20 --mode runtime-client --mpps {short_rate/1e6} --config /data/caladan/client1.config\""
             wrk = Wrk(full_command_short, s.short_name)
             wrks.append(wrk)
 
@@ -350,7 +350,7 @@ def benchmark_data_point(exp, target_rate):
             long_rate = int(target_rate * 0.05)
             # command_long = f"wrk_ds -t10 -c10 -d50s -R{long_rate} -s {s.long_req} --dist exp --latency http://127.0.0.1:{exp['current_port']}"
             # full_command_long = f"numactl --cpunodebind {numa_node} " + command_long
-            full_command_long = f"ssh hp019.utah.cloudlab.us \"/data/caladan/apps/synthetic/target/release/synthetic 10.10.1.2:{exp['current_port']} --threads 100 --protocol http --transport tcp --http_uri /iteratekey/800/1 --runtime 20 --mode runtime-client --mpps {long_rate/1e6} --config /data/caladan/client2.config\""
+            full_command_long = f"ssh hp047.utah.cloudlab.us \"/data/caladan/apps/synthetic/target/release/synthetic 10.10.1.2:{exp['current_port']} --threads 10 --protocol http --transport tcp --http_uri /iteratekey/250/1 --runtime 20 --mode runtime-client --mpps {long_rate/1e6} --config /data/caladan/client2.config\""
             wrk = Wrk(full_command_long, s.long_name)
             wrks.append(wrk)
 
@@ -425,12 +425,21 @@ def offered_loads(exp):
                 max_load = 20 * 1000
 
         num_steps = 10
-        step_size = int((max_load - min_load) / num_steps)
     else:
         print(f"warning: rates may not be optimal for {exp['cores']} cores")
-        max_load = 40 * 1000 * exp['cores']
+        max_load = 40 * 1000
+        if exp['server_type'] == "badger":
+            if exp['avg_service_time_us'] == "short":
+                max_load = 20000
+            elif exp['avg_service_time_us'] == "long":
+                max_load = 8000
+            
+            if exp['bimodal']:
+                max_load = 20 * 1000
+        max_load = max_load * exp['cores']
         num_steps = 8
-        step_size = int((max_load - min_load) / num_steps)
+
+    step_size = int((max_load - min_load) / num_steps)
 
     return [min_load + step_size * (i + 1) for i in range(num_steps)]
 
@@ -486,7 +495,11 @@ def main():
     parser.add_argument('-trace', action="store_true", help='run with traces')
     parser.add_argument('-bimodal', action="store_true", help='use a bimodal distribution')
     parser.add_argument('-server', type=str, default='fakework', help='type of server to benchmark')
+    parser.add_argument('-logdir', type=str, default="run.{}".format(datetime.now().strftime("%Y%m%d%H%M%S")), help='type of server to benchmark')
     args = parser.parse_args()
+    global data_path
+    data_path = args.logdir
+
 
     start_time = datetime.now()
 
